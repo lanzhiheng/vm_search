@@ -1,45 +1,59 @@
-"""Main image search engine implementation."""
+"""Main image search engine implementation using CLIP and Milvus."""
 
-import faiss
+import os
 import numpy as np
 import pickle
 from pathlib import Path
 from typing import List, Dict, Union, Optional
 from tqdm import tqdm
-import cv2
 
-from .feature_extractor import FeatureExtractor
-from .utils import load_image_paths, is_image_file
+from .clip_extractor import CLIPExtractor
+from .milvus_adapter import MilvusAdapter
+from .utils import load_image_paths
 
 
 class ImageSearchEngine:
-    """Image search engine using feature extraction and similarity search."""
+    """Image search engine using CLIP embeddings and Milvus vector database."""
     
     def __init__(
         self,
-        model_name: str = "resnet50",
-        index_type: str = "l2",
+        model_name: str = "openai/clip-vit-large-patch14",
+        collection_name: str = "image_search",
+        db_path: str = "./data/index/milvus_lite.db",
         device: str = None
     ):
         """
         Initialize the image search engine.
         
         Args:
-            model_name: Pre-trained model name for feature extraction
-            index_type: Type of similarity metric ('l2' or 'cosine')
-            device: Device to run feature extraction on
+            model_name: CLIP model name (default: openai/clip-vit-large-patch14)
+            collection_name: Name for the Milvus collection
+            db_path: Path for Milvus Lite database storage
+            device: Device to run feature extraction on ('cuda' or 'cpu')
         """
-        self.feature_extractor = FeatureExtractor(model_name=model_name, device=device)
-        self.index_type = index_type
-        self.index = None
-        self.image_paths = []
+        self.model_name = model_name
+        self.collection_name = collection_name
+        self.db_path = db_path
+        
+        # Initialize CLIP feature extractor
+        self.feature_extractor = CLIPExtractor(model_name=model_name, device=device)
         self.feature_dim = self.feature_extractor.get_feature_dim()
+        
+        # Initialize Milvus adapter
+        self.milvus = MilvusAdapter(
+            collection_name=collection_name,
+            db_path=db_path,
+            embedding_dim=self.feature_dim
+        )
+        
+        self.image_paths = []
         
     def build_index(
         self,
         image_dir: Union[str, Path],
         batch_size: int = 32,
-        save_path: Optional[str] = None
+        save_path: Optional[str] = None,
+        drop_existing: bool = False
     ):
         """
         Build search index from images in a directory.
@@ -47,7 +61,8 @@ class ImageSearchEngine:
         Args:
             image_dir: Directory containing images to index
             batch_size: Number of images to process at once
-            save_path: Path to save the index (optional)
+            save_path: Path to save metadata (Milvus persists automatically)
+            drop_existing: If True, drop existing collection before building
         """
         image_dir = Path(image_dir)
         
@@ -59,35 +74,42 @@ class ImageSearchEngine:
         if len(self.image_paths) == 0:
             raise ValueError(f"No images found in {image_dir}")
         
-        # Extract features
-        print("Extracting features...")
-        features_list = []
+        # Create Milvus collection
+        self.milvus.create_collection(drop_existing=drop_existing)
+        
+        # Extract features and collect metadata
+        print("Extracting CLIP features and collecting metadata...")
         
         for i in tqdm(range(0, len(self.image_paths), batch_size)):
             batch_paths = self.image_paths[i:i + batch_size]
+            
             try:
+                # Extract features
                 batch_features = self.feature_extractor.extract_from_batch(batch_paths)
-                features_list.append(batch_features)
+                
+                # Collect metadata for each image
+                batch_metadata = []
+                for img_path in batch_paths:
+                    stat = os.stat(img_path)
+                    metadata = {
+                        'image_path': str(img_path.absolute()),
+                        'filename': img_path.name,
+                        'file_size': stat.st_size,
+                        'created_time': int(stat.st_ctime),
+                        'modified_time': int(stat.st_mtime),
+                    }
+                    batch_metadata.append(metadata)
+                
+                # Insert into Milvus
+                self.milvus.insert_images(batch_features, batch_metadata)
+                
             except Exception as e:
-                print(f"Error processing batch {i}: {e}")
+                print(f"Error processing batch starting at {i}: {e}")
                 continue
         
-        # Combine all features
-        features = np.vstack(features_list).astype('float32')
+        print(f"Index built successfully with {len(self.image_paths)} images")
         
-        # Build FAISS index
-        print("Building search index...")
-        if self.index_type == "cosine":
-            # Normalize for cosine similarity
-            faiss.normalize_L2(features)
-            self.index = faiss.IndexFlatIP(self.feature_dim)
-        else:  # l2
-            self.index = faiss.IndexFlatL2(self.feature_dim)
-        
-        self.index.add(features)
-        print(f"Index built with {self.index.ntotal} images")
-        
-        # Save index if path provided
+        # Save metadata if path provided
         if save_path:
             self.save(save_path)
     
@@ -104,82 +126,90 @@ class ImageSearchEngine:
             top_k: Number of top results to return
             
         Returns:
-            List of dictionaries with 'path', 'score', and 'rank' keys
+            List of dictionaries with metadata and similarity scores
+            Keys: rank, id, score, image_path, filename, file_size, 
+                  created_time, modified_time
         """
-        if self.index is None:
-            raise ValueError("Index not built. Call build_index() first.")
-        
         # Extract query features
         query_features = self.feature_extractor.extract_from_image(query_image)
-        query_features = query_features.reshape(1, -1).astype('float32')
         
-        # Normalize if using cosine similarity
-        if self.index_type == "cosine":
-            faiss.normalize_L2(query_features)
+        # Search in Milvus
+        results = self.milvus.search(
+            query_embedding=query_features,
+            top_k=top_k
+        )
         
-        # Search
-        distances, indices = self.index.search(query_features, top_k)
-        
-        # Format results
-        results = []
-        for rank, (idx, distance) in enumerate(zip(indices[0], distances[0])):
-            results.append({
-                'rank': rank + 1,
-                'path': str(self.image_paths[idx]),
-                'score': float(distance),
-                'index': int(idx)
-            })
+        # Rename image_path to path for backward compatibility
+        for result in results:
+            result['path'] = result.pop('image_path')
         
         return results
     
     def save(self, save_path: str):
         """
-        Save the index and metadata to disk.
+        Save metadata to disk (Milvus data persists automatically).
         
         Args:
-            save_path: Path to save the index
+            save_path: Path to save metadata
         """
         save_path = Path(save_path)
         save_path.mkdir(parents=True, exist_ok=True)
         
-        # Save FAISS index
-        index_file = save_path / "index.faiss"
-        faiss.write_index(self.index, str(index_file))
-        
-        # Save metadata
+        # Save configuration metadata
         metadata = {
-            'image_paths': self.image_paths,
-            'model_name': self.feature_extractor.model_name,
-            'index_type': self.index_type,
-            'feature_dim': self.feature_dim
+            'model_name': self.model_name,
+            'collection_name': self.collection_name,
+            'db_path': self.db_path,
+            'feature_dim': self.feature_dim,
+            'num_images': len(self.image_paths)
         }
-        metadata_file = save_path / "metadata.pkl"
+        
+        metadata_file = save_path / "engine_metadata.pkl"
         with open(metadata_file, 'wb') as f:
             pickle.dump(metadata, f)
         
-        print(f"Index saved to {save_path}")
+        print(f"Metadata saved to {save_path}")
+        print(f"Milvus data persisted automatically to {self.db_path}")
     
     def load(self, load_path: str):
         """
-        Load a saved index from disk.
+        Load metadata from disk (Milvus connects to existing database).
         
         Args:
-            load_path: Path to load the index from
+            load_path: Path to load metadata from
         """
         load_path = Path(load_path)
         
-        # Load FAISS index
-        index_file = load_path / "index.faiss"
-        self.index = faiss.read_index(str(index_file))
-        
-        # Load metadata
-        metadata_file = load_path / "metadata.pkl"
+        # Load configuration metadata
+        metadata_file = load_path / "engine_metadata.pkl"
         with open(metadata_file, 'rb') as f:
             metadata = pickle.load(f)
         
-        self.image_paths = metadata['image_paths']
-        self.index_type = metadata['index_type']
+        self.model_name = metadata['model_name']
+        self.collection_name = metadata['collection_name']
+        self.db_path = metadata['db_path']
         self.feature_dim = metadata['feature_dim']
         
-        print(f"Index loaded from {load_path}")
-        print(f"Loaded {len(self.image_paths)} images")
+        # Reconnect to Milvus collection
+        self.milvus = MilvusAdapter(
+            collection_name=self.collection_name,
+            db_path=self.db_path,
+            embedding_dim=self.feature_dim
+        )
+        self.milvus.create_collection(drop_existing=False)
+        
+        stats = self.milvus.get_collection_stats()
+        print(f"Engine loaded from {load_path}")
+        print(f"Connected to collection with {stats.get('num_entities', 0)} images")
+    
+    def get_stats(self) -> Dict:
+        """
+        Get statistics about the search engine.
+        
+        Returns:
+            Dictionary with engine statistics
+        """
+        stats = self.milvus.get_collection_stats()
+        stats['model_name'] = self.model_name
+        stats['feature_dim'] = self.feature_dim
+        return stats

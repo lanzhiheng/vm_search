@@ -1,7 +1,8 @@
-"""Basic usage example for the image search engine."""
+"""Basic usage example for the image search engine with CLIP and Milvus."""
 
 from pathlib import Path
 import sys
+from datetime import datetime
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -12,11 +13,12 @@ from src import ImageSearchEngine
 def main():
     """Run a basic example of the image search engine."""
     
-    # Initialize the search engine
-    print("Initializing search engine...")
+    # Initialize the search engine with CLIP and Milvus
+    print("Initializing search engine with CLIP and Milvus...")
     engine = ImageSearchEngine(
-        model_name="resnet50",
-        index_type="cosine"  # Use cosine similarity
+        model_name="openai/clip-vit-large-patch14",
+        collection_name="image_search",
+        db_path="./data/index/milvus_lite.db"
     )
     
     # Path to your image directory
@@ -29,12 +31,13 @@ def main():
         return
     
     # Build the index
-    print("\nBuilding index from images...")
+    print("\nBuilding index from images with CLIP embeddings...")
     try:
         engine.build_index(
             image_dir=image_dir,
-            batch_size=32,
-            save_path="data/index"
+            batch_size=16,  # Smaller batch for CLIP
+            save_path="data/index",
+            drop_existing=True  # Set to True to rebuild from scratch
         )
     except ValueError as e:
         print(f"Error: {e}")
@@ -54,11 +57,18 @@ def main():
     # Search for similar images
     results = engine.search(query_image, top_k=5)
     
-    # Display results
+    # Display results with metadata
     print("\nTop 5 similar images:")
     for result in results:
-        print(f"  {result['rank']}. {Path(result['path']).name} "
-              f"(score: {result['score']:.4f})")
+        # Convert timestamps to readable format
+        mod_time = datetime.fromtimestamp(result['modified_time']).strftime('%Y-%m-%d %H:%M')
+        file_size_mb = result['file_size'] / (1024 * 1024)
+        
+        print(f"  {result['rank']}. {result['filename']}")
+        print(f"      Score: {result['score']:.4f}")
+        print(f"      Size: {file_size_mb:.2f} MB")
+        print(f"      Modified: {mod_time}")
+        print()
 
 
 if __name__ == "__main__":

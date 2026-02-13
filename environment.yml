@@ -17,7 +17,9 @@ dependencies:
   - black
   - flake8
   - pip:
-    - faiss-cpu
-    - timm
+    - pymilvus>=2.3.0
+    - transformers>=4.35.0
+    - ftfy>=6.1.0
+    - regex>=2023.0.0
     - torch
     - torchvision

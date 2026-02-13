@@ -1,13 +1,15 @@
 # VM Search - Image Searching Engine
 
-A Python-based image searching engine that uses deep learning and similarity search to find visually similar images.
+A Python-based image searching engine powered by CLIP and Milvus for semantic image similarity search.
 
 ## Features
 
-- Image feature extraction using pre-trained models
-- Efficient similarity search with FAISS
-- Support for multiple image formats
-- Easy-to-use API for indexing and searching
+- **CLIP-based feature extraction** using OpenAI's ViT-Large-Patch14 model for superior semantic understanding
+- **Milvus Lite vector database** for efficient similarity search (no separate server required)
+- **Rich metadata storage** including file paths, sizes, and timestamps
+- **Support for multiple image formats** (JPG, PNG, BMP, GIF, TIFF, WebP)
+- **Easy-to-use API** for indexing and searching
+- **Scalable architecture** ready for production use
 
 ## Setup
 
@@ -41,7 +43,8 @@ vm_search/
 │   └── index/            # Generated index files
 ├── src/                  # Source code
 │   ├── __init__.py
-│   ├── feature_extractor.py  # Feature extraction logic
+│   ├── clip_extractor.py     # CLIP feature extraction
+│   ├── milvus_adapter.py     # Milvus database operations
 │   ├── search_engine.py      # Search engine implementation
 │   └── utils.py              # Utility functions
 ├── notebooks/            # Jupyter notebooks for experiments
@@ -55,21 +58,41 @@ vm_search/
 ## Quick Start
 
 ```python
-from src.search_engine import ImageSearchEngine
+from src import ImageSearchEngine
 
-# Initialize the search engine
-engine = ImageSearchEngine()
+# Initialize the search engine with CLIP and Milvus
+engine = ImageSearchEngine(
+    model_name="openai/clip-vit-large-patch14",
+    collection_name="image_search",
+    db_path="./data/index/milvus_lite.db"
+)
 
-# Index images from a directory
-engine.build_index('data/raw/')
+# Build index from images in a directory
+engine.build_index('data/raw/', batch_size=16)
 
 # Search for similar images
 results = engine.search('query_image.jpg', top_k=5)
 
-# Display results
+# Display results with metadata
 for result in results:
-    print(f"Image: {result['path']}, Score: {result['score']}")
+    print(f"Rank {result['rank']}: {result['filename']}")
+    print(f"  Score: {result['score']:.4f}")
+    print(f"  Size: {result['file_size'] / (1024*1024):.2f} MB")
+    print(f"  Path: {result['path']}")
 ```
+
+## Key Technologies
+
+- **CLIP (Contrastive Language-Image Pre-training)**: State-of-the-art vision model from OpenAI
+  - Model: `openai/clip-vit-large-patch14`
+  - 768-dimensional embeddings
+  - Superior semantic understanding compared to traditional CNN models
+
+- **Milvus Lite**: Embedded vector database
+  - No separate server installation required
+  - Automatic data persistence
+  - Production-ready performance
+  - Cosine similarity search
 
 ## Usage Examples
 

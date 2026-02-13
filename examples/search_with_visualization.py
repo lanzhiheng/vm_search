@@ -30,13 +30,15 @@ def visualize_results(query_path: str, results: list, save_path: str = None):
     axes[0].set_title("Query", fontsize=12, fontweight='bold')
     axes[0].axis('off')
     
-    # Show results
+    # Show results with metadata
     for idx, result in enumerate(results, 1):
         img = Image.open(result['path'])
         axes[idx].imshow(img)
+        # Show rank, score, and file size
+        size_mb = result.get('file_size', 0) / (1024 * 1024)
         axes[idx].set_title(
-            f"#{result['rank']}\nScore: {result['score']:.3f}",
-            fontsize=10
+            f"#{result['rank']}\nScore: {result['score']:.3f}\n{size_mb:.1f}MB",
+            fontsize=9
         )
         axes[idx].axis('off')
     
@@ -50,11 +52,14 @@ def visualize_results(query_path: str, results: list, save_path: str = None):
 
 
 def main():
-    """Run example with visualization."""
+    """Run example with visualization using CLIP and Milvus."""
     
-    # Initialize search engine
-    print("Initializing search engine...")
-    engine = ImageSearchEngine(model_name="resnet50", index_type="cosine")
+    # Initialize search engine with CLIP and Milvus
+    print("Initializing search engine with CLIP and Milvus...")
+    engine = ImageSearchEngine(
+        model_name="openai/clip-vit-large-patch14",
+        collection_name="image_search"
+    )
     
     # Build or load index
     index_path = Path("data/index")
@@ -63,7 +68,7 @@ def main():
         print("Loading existing index...")
         engine.load(index_path)
     else:
-        print("Building new index...")
+        print("Building new index with CLIP embeddings...")
         image_dir = Path("data/raw")
         
         if not image_dir.exists() or len(list(image_dir.iterdir())) == 0:
@@ -71,7 +76,7 @@ def main():
             print("Please add images to data/raw/ directory first.")
             return
         
-        engine.build_index(image_dir, save_path=index_path)
+        engine.build_index(image_dir, batch_size=16, save_path=index_path)
     
     # Select a query image
     image_paths = load_image_paths(Path("data/raw"))
@@ -85,11 +90,12 @@ def main():
     # Search
     results = engine.search(query_image, top_k=5)
     
-    # Print results
+    # Print results with metadata
     print("\nSearch Results:")
     for result in results:
-        print(f"  {result['rank']}. {Path(result['path']).name} "
-              f"(score: {result['score']:.4f})")
+        print(f"  {result['rank']}. {result['filename']} "
+              f"(score: {result['score']:.4f}, "
+              f"size: {result['file_size']/(1024*1024):.2f}MB)")
     
     # Visualize
     print("\nGenerating visualization...")
