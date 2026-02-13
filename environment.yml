@@ -1,0 +1,23 @@
+name: vm_search
+channels:
+  - conda-forge
+  - pytorch
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - opencv
+  - pillow
+  - scikit-learn
+  - matplotlib
+  - tqdm
+  - jupyter
+  - pytest
+  - black
+  - flake8
+  - pip:
+    - faiss-cpu
+    - timm
+    - torch
+    - torchvision
