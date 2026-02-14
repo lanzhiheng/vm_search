@@ -29,7 +29,7 @@ class ImageSearchEngine:
             model_name: CLIP model name (default: openai/clip-vit-large-patch14)
             collection_name: Name for the Milvus collection
             db_path: Path for Milvus Lite database storage
-            device: Device to run feature extraction on ('cuda' or 'cpu')
+            device: Device to run feature extraction on ('cuda', 'mps', or 'cpu')
         """
         self.model_name = model_name
         self.collection_name = collection_name

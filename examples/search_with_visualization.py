@@ -37,7 +37,7 @@ def visualize_results(query_path: str, results: list, save_path: str = None):
         # Show rank, score, and file size
         size_mb = result.get('file_size', 0) / (1024 * 1024)
         axes[idx].set_title(
-            f"#{result['rank']}\nScore: {result['score']:.3f} Similarity: {result['similarity']:.1f}%\n{size_mb:.1f}MB",
+            f"#{result['rank']}\nScore: {result['score']:.3f}\n{size_mb:.1f}MB",
             fontsize=9
         )
         axes[idx].axis('off')
@@ -94,8 +94,7 @@ def main():
     print("\nSearch Results:")
     for result in results:
         print(f"  {result['rank']}. {result['filename']} "
-              f"(score: {result['score']:.4f}, similarity: {result['similarity']:.1f}%, "
-              f"size: {result['file_size']/(1024*1024):.2f}MB)")
+              f"(score: {result['score']:.4f}, size: {result['file_size']/(1024*1024):.2f}MB)")
     
     # Visualize
     print("\nGenerating visualization...")

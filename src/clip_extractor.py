@@ -39,9 +39,16 @@ class CLIPExtractor:
         
         Args:
             model_name: CLIP model name from Hugging Face (default: openai/clip-vit-large-patch14)
-            device: Device to run the model on ('cuda' or 'cpu'). Auto-detect if None.
+            device: Device to run the model on ('cuda', 'mps', or 'cpu'). Auto-detect if None (prefers cuda, then mps, then cpu).
         """
-        self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
+        if device is not None:
+            self.device = device
+        elif torch.cuda.is_available():
+            self.device = "cuda"
+        elif getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
+            self.device = "mps"
+        else:
+            self.device = "cpu"
         self.model_name = model_name
         
         print(f"Loading CLIP model: {model_name}...")
