@@ -60,6 +60,10 @@ outputs/
 *.jpeg
 !examples/*.png
 
+# Test images (do not commit)
+bus.jpg
+**/bus.jpg
+
 # Testing
 .pytest_cache/
 .coverage

@@ -162,12 +162,15 @@ class MilvusAdapter:
         )
         
         # Format results
+        # Milvus COSINE returns similarity (higher = more similar), not distance
         formatted_results = []
         for i, hit in enumerate(results[0]):
+            score_raw = hit.get("distance", 0.0)  # field named "distance" but value is similarity
             result = {
                 "rank": i + 1,
                 "id": hit.get("id"),
-                "score": hit.get("distance"),  # MilvusClient uses "distance" instead of "score"
+                "score": score_raw,  # original COSINE similarity from Milvus (higher = more similar)
+                "similarity": score_raw * 100,  # 0-100%, higher = more similar
             }
             # Add all output fields
             for field in output_fields:

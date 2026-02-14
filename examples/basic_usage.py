@@ -65,7 +65,7 @@ def main():
         file_size_mb = result['file_size'] / (1024 * 1024)
         
         print(f"  {result['rank']}. {result['filename']}")
-        print(f"      Score: {result['score']:.4f}")
+        print(f"      Score: {result['score']:.4f}  Similarity: {result['similarity']:.1f}%")
         print(f"      Size: {file_size_mb:.2f} MB")
         print(f"      Modified: {mod_time}")
         print()

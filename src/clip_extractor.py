@@ -92,6 +92,28 @@ class CLIPExtractor:
         
         return features
     
+    def extract_from_text(self, text: str) -> np.ndarray:
+        """
+        Extract features from a text string using CLIP text encoder.
+        
+        Args:
+            text: Input text to encode
+            
+        Returns:
+            Feature vector as numpy array (768-dimensional for ViT-Large)
+        """
+        inputs = self.processor(text=[text], return_tensors="pt", padding=True, truncation=True)
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
+        with torch.no_grad():
+            outputs = self.model.get_text_features(**inputs)
+        if hasattr(outputs, 'pooler_output'):
+            text_features = outputs.pooler_output
+        else:
+            text_features = outputs
+        features = text_features.cpu().numpy().flatten()
+        features = features / (np.linalg.norm(features) + 1e-8)
+        return features
+    
     def extract_from_batch(self, images: List[Union[str, Path, Image.Image]]) -> np.ndarray:
         """
         Extract features from multiple images in batch.

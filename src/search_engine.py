@@ -145,6 +145,32 @@ class ImageSearchEngine:
         
         return results
     
+    def search_by_text(
+        self,
+        text: str,
+        top_k: int = 5
+    ) -> List[Dict]:
+        """
+        Search for similar images by text query.
+        
+        Args:
+            text: Text query describing the images to find
+            top_k: Number of top results to return
+            
+        Returns:
+            List of dictionaries with metadata and similarity scores
+            Keys: rank, id, score, image_path, filename, file_size,
+                  created_time, modified_time
+        """
+        query_features = self.feature_extractor.extract_from_text(text)
+        results = self.milvus.search(
+            query_embedding=query_features,
+            top_k=top_k
+        )
+        for result in results:
+            result['path'] = result.pop('image_path')
+        return results
+    
     def save(self, save_path: str):
         """
         Save metadata to disk (Milvus data persists automatically).
