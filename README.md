@@ -94,6 +94,26 @@ for result in results:
   - Production-ready performance
   - Cosine similarity search
 
+## Flask 搜索服务
+
+通过文字搜索图片的 Web 服务：
+
+```bash
+# 构建索引（若尚未构建）
+python index_images.py /path/to/your/images --save-path data/index
+
+# 启动服务（默认端口 5000）
+python app.py
+
+# 自定义图片根路径和端口（图片在项目外时需设置）
+VM_SEARCH_IMAGE_BASE=/path/to/your/photos PORT=8100 python app.py
+```
+
+环境变量：
+- `VM_SEARCH_IMAGE_BASE` - 图片允许的根路径（图片在项目外时设置）
+- `VM_SEARCH_IMAGE_PERMISSIVE=1` - 允许任意路径的图片（本地开发用）
+- `PORT` - 监听端口，默认 5000
+
 ## Usage Examples
 
 See the `examples/` directory for detailed usage examples.
